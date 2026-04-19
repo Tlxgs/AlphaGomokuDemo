@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>五子棋 AI · 浏览器版</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 左侧控制面板 -->
+        <div class="control-panel">
+            <h2>五子棋 AI</h2>
+            <div class="settings">
+                <div class="setting-item">
+                    <label>执子:</label>
+                    <select id="playerColor">
+                        <option value="black" selected>黑棋 (先手)</option>
+                        <option value="white">白棋 (后手)</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label>模拟次数:</label>
+                    <input type="number" id="simulations" min="10" max="800" value="200" step="10">
+                </div>
+                <div class="setting-item">
+                    <label>C_puct:</label>
+                    <input type="number" id="cpuct" min="0.5" max="5.0" value="1.5" step="0.1">
+                </div>
+                <div class="setting-item">
+                    <label>温度:</label>
+                    <input type="number" id="temperature" min="0.0" max="2.0" value="0.0" step="0.1">
+                </div>
+                <div class="setting-item">
+                    <label>显示:</label>
+                    <select id="displayMode">
+                        <option value="board" selected>对弈棋盘</option>
+                        <option value="mcts">MCTS统计</option>
+                        <option value="policy">策略网络概率</option>
+                    </select>
+                </div>
+                <div class="button-group">
+                    <button id="applyBtn">应用参数</button>
+                    <button id="resetBtn">重新开始</button>
+                </div>
+            </div>
+            <div class="winrate-bar">
+                <div class="winrate-title">当前胜率</div>
+                <div class="bar-container">
+                    <div id="blackBar" class="black-bar" style="width: 50%;">黑棋 50%</div>
+                    <div id="whiteBar" class="white-bar" style="width: 50%;">白棋 50%</div>
+                </div>
+            </div>
+            <div class="status" id="statusMessage">你的回合</div>
+            <div class="model-status" id="modelStatus">模型加载中...</div>
+        </div>
+
+        <!-- 右侧棋盘区域 -->
+        <div class="board-container">
+            <canvas id="boardCanvas" width="700" height="700"></canvas>
+        </div>
+    </div>
+
+    <!-- 加载 ONNX Runtime Web -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js"></script>
+    <!-- 应用脚本 -->
+    <script src="game.js"></script>
+    <script src="mcts.js"></script>
+    <script src="ui.js"></script>
+    <script>
+        // 初始化应用
+        window.addEventListener('DOMContentLoaded', () => {
+            window.app = new GomokuApp();
+        });
+    </script>
+</body>
+</html>
