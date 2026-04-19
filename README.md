@@ -1,0 +1,2 @@
+# AlphaGomokuDemo
+AlphaGomoku项目的html演示版本
