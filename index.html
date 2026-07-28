@@ -1,77 +1,1209 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>五子棋 AI · 浏览器版</title>
-    <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>五子棋 AI</title>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/ort.min.js">
+    </script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: #2b2b3a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            user-select: none;
+        }
+        .app {
+            background: #3d3d52;
+            border-radius: 30px;
+            padding: 32px 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+            display: flex;
+            gap: 36px;
+            flex-wrap: wrap;
+            align-items: flex-start;
+        }
+        .board-wrapper {
+            background: #d9b382;
+            border-radius: 22px;
+            padding: 18px;
+            box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.3), 0 8px 16px rgba(0, 0, 0, 0.4);
+        }
+        canvas#boardCanvas {
+            display: block;
+            border-radius: 8px;
+            cursor: pointer;
+            background: #dcb35c;
+            width: 700px;
+            height: 700px;
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+        }
+        .panel {
+            background: #4a4a62;
+            border-radius: 20px;
+            padding: 24px 26px;
+            min-width: 260px;
+            max-width: 300px;
+            color: #eee;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .panel h2 {
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            color: #f0e6d0;
+            text-align: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 12px;
+            margin-bottom: 2px;
+        }
+        .panel .status {
+            background: #35354a;
+            border-radius: 12px;
+            padding: 14px 16px;
+            text-align: center;
+            font-size: 17px;
+            font-weight: 500;
+            min-height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #c8d0e0;
+            border-left: 4px solid #6a8caf;
+        }
+        .panel .status .win {
+            color: #6fcf97;
+        }
+        .panel .status .lose {
+            color: #f28b82;
+        }
+        .param-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .param-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 15px;
+            color: #c0c8d8;
+        }
+        .param-row select,
+        .param-row input[type="radio"] {
+            accent-color: #8ab4d6;
+            background: #2e2e44;
+            color: #eee;
+            border: 1px solid #5a5a7a;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .param-row .radio-group {
+            display: flex;
+            gap: 12px;
+        }
+        .param-row .radio-group label {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 4px;
+        }
+        .btn {
+            flex: 1;
+            background: #5a5a7a;
+            border: none;
+            border-radius: 10px;
+            padding: 12px 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: #eee;
+            cursor: pointer;
+            transition: background 0.15s, transform 0.1s;
+            box-shadow: 0 4px 0 #2e2e44;
+        }
+        .btn:hover {
+            background: #6e6e92;
+            transform: translateY(-1px);
+        }
+        .btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #2e2e44;
+        }
+        .btn-primary {
+            background: #4f7a9e;
+            box-shadow: 0 4px 0 #2f4a62;
+        }
+        .btn-primary:hover {
+            background: #5f8fb6;
+        }
+        .btn-danger {
+            background: #9e5f5f;
+            box-shadow: 0 4px 0 #623f3f;
+        }
+        .btn-danger:hover {
+            background: #b67070;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            color: #aab0c0;
+            padding: 6px 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .info-row .label {
+            color: #8890a0;
+        }
+        .info-row .value {
+            color: #d0d8e8;
+            font-weight: 500;
+        }
+        .model-status {
+            font-size: 14px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: #35354a;
+            text-align: center;
+            color: #8a9aaa;
+        }
+        .model-status.loaded {
+            color: #7bcfa6;
+            background: #2a4a3a;
+        }
+        .model-status.error {
+            color: #f28b82;
+            background: #4a2a2a;
+        }
+        .winrate-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #b0b8c8;
+        }
+        .winrate-bar {
+            flex: 1;
+            height: 20px;
+            background: #2e2e44;
+            border-radius: 20px;
+            overflow: hidden;
+            display: flex;
+            position: relative;
+        }
+        .winrate-bar .black {
+            background: #2a2a2a;
+            height: 100%;
+            transition: width 0.2s;
+            border-radius: 20px 0 0 20px;
+        }
+        .winrate-bar .white {
+            background: #d0d0d0;
+            height: 100%;
+            transition: width 0.2s;
+            border-radius: 0 20px 20px 0;
+        }
+        .winrate-bar .divider {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 1px;
+            background: rgba(255, 255, 255, 0.15);
+        }
+        .winrate-text {
+            min-width: 90px;
+            text-align: right;
+            font-weight: 500;
+            color: #d0d8e8;
+        }
+        @media (max-width: 1024px) {
+            .app {
+                flex-direction: column;
+                align-items: center;
+                padding: 20px;
+            }
+            .panel {
+                min-width: unset;
+                max-width: 700px;
+                width: 100%;
+            }
+            canvas#boardCanvas {
+                width: 100%;
+                height: auto;
+                aspect-ratio: 1/1;
+            }
+        }
+        @media (max-width: 480px) {
+            .app {
+                padding: 12px;
+            }
+            .panel {
+                padding: 16px;
+            }
+            .btn {
+                font-size: 14px;
+                padding: 10px 0;
+            }
+            .param-row {
+                font-size: 13px;
+            }
+        }
+    </style>
 </head>
 <body>
-    <div class="container">
-        <!-- 左侧控制面板 -->
-        <div class="control-panel">
-            <h2>五子棋 AI</h2>
-            <div class="settings">
-                <div class="setting-item">
-                    <label>执子:</label>
-                    <select id="playerColor">
-                        <option value="black" selected>黑棋 (先手)</option>
+    <div class="app" id="app">
+        <div class="board-wrapper">
+            <canvas id="boardCanvas" width="700" height="700"></canvas>
+        </div>
+        <div class="panel" id="panel">
+            <h2>♟ 五子棋 AI</h2>
+            <div class="status" id="statusDisplay"><span>⏳ 初始化中...</span></div>
+
+            <div class="winrate-wrap">
+                <span>⚫</span>
+                <div class="winrate-bar" id="winrateBar">
+                    <div class="black" id="winBlack" style="width:50%"></div>
+                    <div class="white" id="winWhite" style="width:50%"></div>
+                    <div class="divider"></div>
+                </div>
+                <span>⚪</span>
+                <span class="winrate-text" id="winrateText">50% / 50%</span>
+            </div>
+
+            <div class="param-group">
+                <!-- 执子选择 -->
+                <div class="param-row">
+                    <span>执子</span>
+                    <select id="colorSelect">
+                        <option value="black">黑棋 (先手)</option>
                         <option value="white">白棋 (后手)</option>
                     </select>
                 </div>
-                <div class="setting-item">
-                    <label>模拟次数:</label>
-                    <input type="number" id="simulations" min="10" max="800" value="200" step="10">
-                </div>
-                <div class="setting-item">
-                    <label>C_puct:</label>
-                    <input type="number" id="cpuct" min="0.5" max="5.0" value="1.5" step="0.1">
-                </div>
-                <div class="setting-item">
-                    <label>温度:</label>
-                    <input type="number" id="temperature" min="0.0" max="2.0" value="0.0" step="0.1">
-                </div>
-                <div class="setting-item">
-                    <label>显示:</label>
-                    <select id="displayMode">
-                        <option value="board" selected>对弈棋盘</option>
-                        <option value="mcts">MCTS统计</option>
-                        <option value="policy">策略网络概率</option>
-                    </select>
-                </div>
-                <div class="button-group">
-                    <button id="applyBtn">应用参数</button>
-                    <button id="resetBtn">重新开始</button>
+                <!-- 模拟次数三选一 -->
+                <div class="param-row">
+                    <span>强度</span>
+                    <div class="radio-group" id="simGroup">
+                        <label><input type="radio" name="simLevel" value="50" /> 简单</label>
+                        <label><input type="radio" name="simLevel" value="200" checked /> 普通</label>
+                        <label><input type="radio" name="simLevel" value="500" /> 专家</label>
+                    </div>
                 </div>
             </div>
-            <div class="winrate-bar">
-                <div class="winrate-title">当前胜率</div>
-                <div class="bar-container">
-                    <div id="blackBar" class="black-bar" style="width: 50%;">黑棋 50%</div>
-                    <div id="whiteBar" class="white-bar" style="width: 50%;">白棋 50%</div>
-                </div>
-            </div>
-            <div class="status" id="statusMessage">你的回合</div>
-            <div class="model-status" id="modelStatus">模型加载中...</div>
-        </div>
 
-        <!-- 右侧棋盘区域 -->
-        <div class="board-container">
-            <canvas id="boardCanvas" width="700" height="700"></canvas>
+            <div class="btn-group">
+                <button class="btn btn-primary" id="resetBtn">🔄 新游戏</button>
+                <button class="btn btn-danger" id="undoBtn">↩ 悔棋</button>
+            </div>
+
+            <div class="info-row">
+                <span class="label">步数</span>
+                <span class="value" id="moveCount">0</span>
+            </div>
+            <div class="info-row">
+                <span class="label">状态</span>
+                <span class="value" id="turnInfo">你的回合</span>
+            </div>
+            <div class="model-status" id="modelStatus">⏳ 等待 ONNX Runtime 加载...</div>
         </div>
     </div>
 
-    <!-- 加载 ONNX Runtime Web -->
-    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js"></script>
-    <!-- 应用脚本 -->
-    <script src="game.js"></script>
-    <script src="mcts.js"></script>
-    <script src="ui.js"></script>
     <script>
-        // 初始化应用
-        window.addEventListener('DOMContentLoaded', () => {
-            window.app = new GomokuApp();
-        });
+        (function() {
+            'use strict';
+
+            // ---------- 常量 ----------
+            const BOARD_SIZE = 15;
+            const CANVAS_SIZE = 700;
+            const CELL_SIZE = CANVAS_SIZE / (BOARD_SIZE + 1);
+            const MARGIN = CELL_SIZE;
+
+            const canvas = document.getElementById('boardCanvas');
+            const ctx = canvas.getContext('2d');
+
+            const statusEl = document.getElementById('statusDisplay');
+            const winBlack = document.getElementById('winBlack');
+            const winWhite = document.getElementById('winWhite');
+            const winrateText = document.getElementById('winrateText');
+            const colorSelect = document.getElementById('colorSelect');
+            const simRadios = document.querySelectorAll('input[name="simLevel"]');
+            const resetBtn = document.getElementById('resetBtn');
+            const undoBtn = document.getElementById('undoBtn');
+            const moveCountEl = document.getElementById('moveCount');
+            const turnInfoEl = document.getElementById('turnInfo');
+            const modelStatusEl = document.getElementById('modelStatus');
+
+            // ---------- 游戏类 ----------
+            class GomokuGame {
+                constructor(size = BOARD_SIZE) {
+                    this.size = size;
+                    this.reset();
+                }
+                reset() {
+                    this.board = Array.from({ length: this.size }, () => Array(this.size).fill(0));
+                    this.currentPlayer = 1; // 1=黑, -1=白
+                    this.winner = 0;
+                    this.gameOver = false;
+                    this.moveHistory = [];
+                    this.lastMove = null;
+                }
+                copy() {
+                    const g = new GomokuGame(this.size);
+                    g.board = this.board.map(row => [...row]);
+                    g.currentPlayer = this.currentPlayer;
+                    g.winner = this.winner;
+                    g.gameOver = this.gameOver;
+                    g.moveHistory = [...this.moveHistory];
+                    g.lastMove = this.lastMove ? [...this.lastMove] : null;
+                    return g;
+                }
+                getLegalMoves() {
+                    const moves = [];
+                    for (let r = 0; r < this.size; r++) {
+                        for (let c = 0; c < this.size; c++) {
+                            if (this.board[r][c] === 0) moves.push([r, c]);
+                        }
+                    }
+                    return moves;
+                }
+                getLegalMovesMask() {
+                    const mask = new Float32Array(this.size * this.size);
+                    for (let r = 0; r < this.size; r++) {
+                        for (let c = 0; c < this.size; c++) {
+                            mask[r * this.size + c] = this.board[r][c] === 0 ? 1 : 0;
+                        }
+                    }
+                    return mask;
+                }
+                isLegalMove(r, c) {
+                    return r >= 0 && r < this.size && c >= 0 && c < this.size && this.board[r][c] === 0;
+                }
+                makeMove(r, c) {
+                    if (!this.isLegalMove(r, c) || this.gameOver) return false;
+                    this.board[r][c] = this.currentPlayer;
+                    this.lastMove = [r, c];
+                    this.moveHistory.push([r, c, this.currentPlayer]);
+                    if (this.checkWin(r, c)) {
+                        this.winner = this.currentPlayer;
+                        this.gameOver = true;
+                    } else if (this.getLegalMoves().length === 0) {
+                        this.winner = 0;
+                        this.gameOver = true;
+                    } else {
+                        this.currentPlayer = -this.currentPlayer;
+                    }
+                    return true;
+                }
+                unsafeMakeMove(r, c) {
+                    this.board[r][c] = this.currentPlayer;
+                    this.lastMove = [r, c];
+                    if (this.checkWin(r, c)) {
+                        this.winner = this.currentPlayer;
+                        this.gameOver = true;
+                    } else if (this.getLegalMoves().length === 0) {
+                        this.winner = 0;
+                        this.gameOver = true;
+                    } else {
+                        this.currentPlayer = -this.currentPlayer;
+                    }
+                }
+                checkWin(row, col) {
+                    const player = this.board[row][col];
+                    if (player === 0) return false;
+                    const directions = [
+                        [1, 0],
+                        [0, 1],
+                        [1, 1],
+                        [1, -1]
+                    ];
+                    for (const [dx, dy] of directions) {
+                        let count = 1;
+                        for (let dir = -1; dir <= 1; dir += 2) {
+                            for (let i = 1; i < 5; i++) {
+                                const nr = row + dx * i * dir,
+                                    nc = col + dy * i * dir;
+                                if (nr < 0 || nr >= this.size || nc < 0 || nc >= this.size ||
+                                    this.board[nr][nc] !== player) break;
+                                count++;
+                            }
+                        }
+                        if (count >= 5) return true;
+                    }
+                    return false;
+                }
+                getCanonicalState() {
+                    const state = new Float32Array(2 * this.size * this.size);
+                    const player = this.currentPlayer;
+                    for (let r = 0; r < this.size; r++) {
+                        for (let c = 0; c < this.size; c++) {
+                            const val = this.board[r][c];
+                            const idx = r * this.size + c;
+                            if (val === player) state[idx] = 1;
+                            else if (val === -player) state[this.size * this.size + idx] = 1;
+                        }
+                    }
+                    return state;
+                }
+            }
+
+            // ---------- MCTS 节点 ----------
+            class MCTSNode {
+                constructor(parent = null, priorProb = 1.0) {
+                    this.parent = parent;
+                    this.children = new Map();
+                    this.priorProb = priorProb;
+                    this.visitCount = 0;
+                    this.valueSum = 0;
+                    this.expanded = false;
+                }
+                getValue() {
+                    return this.visitCount === 0 ? 0 : this.valueSum / this.visitCount;
+                }
+                isLeaf() {
+                    return !this.expanded || this.children.size === 0;
+                }
+            }
+
+            // ---------- MCTS ----------
+            class MCTS {
+                constructor(ortSession, config = {}) {
+                    this.session = ortSession;
+                    this.c_puct = 1.5; // 固定
+                    this.numSimulations = config.numSimulations || 200;
+                    this.temperature = 0.0; // 固定为确定性
+                    this.boardSize = BOARD_SIZE;
+                    this.root = null;
+                    this.inputData = new Float32Array(1 * 2 * this.boardSize * this.boardSize);
+                }
+
+                async initRoot(game) {
+                    const legalMoves = game.getLegalMoves();
+                    if (legalMoves.length === 0) { this.root = null; return; }
+                    const state = game.getCanonicalState();
+                    const mask = game.getLegalMovesMask();
+                    const { policy, value } = await this.inference(state, mask);
+                    const moveProbs = {};
+                    let total = 0;
+                    for (const [r, c] of legalMoves) {
+                        const idx = r * this.boardSize + c;
+                        const prob = policy[idx];
+                        moveProbs[`${r},${c}`] = prob;
+                        total += prob;
+                    }
+                    if (total > 0) {
+                        for (const key in moveProbs) moveProbs[key] /= total;
+                    } else {
+                        const p = 1 / legalMoves.length;
+                        for (const [r, c] of legalMoves) moveProbs[`${r},${c}`] = p;
+                    }
+                    this.root = new MCTSNode();
+                    this.root.expanded = true;
+                    for (const [r, c] of legalMoves) {
+                        const key = `${r},${c}`;
+                        this.root.children.set(key, new MCTSNode(this.root, moveProbs[key]));
+                    }
+                }
+
+                updateRoot(game, lastMove) {
+                    if (!this.root) return;
+                    const key = `${lastMove[0]},${lastMove[1]}`;
+                    if (this.root.children.has(key)) {
+                        const newRoot = this.root.children.get(key);
+                        newRoot.parent = null;
+                        this.root = newRoot;
+                    } else {
+                        this.initRoot(game);
+                    }
+                }
+
+                async inference(state, mask) {
+                    const data = this.inputData;
+                    data.set(state);
+                    const tensor = new ort.Tensor('float32', data, [1, 2, this.boardSize, this.boardSize]);
+                    const feeds = { input: tensor };
+                    const results = await this.session.run(feeds);
+                    const policyLogits = results.policy_logits.data;
+                    const value = results.value.data[0];
+                    const logits = new Float32Array(policyLogits.length);
+                    for (let i = 0; i < logits.length; i++) {
+                        logits[i] = mask[i] === 0 ? -1e8 : policyLogits[i];
+                    }
+                    let maxLogit = -Infinity;
+                    for (let i = 0; i < logits.length; i++) {
+                        if (logits[i] > maxLogit) maxLogit = logits[i];
+                    }
+                    let sum = 0;
+                    for (let i = 0; i < logits.length; i++) {
+                        logits[i] = Math.exp(logits[i] - maxLogit);
+                        sum += logits[i];
+                    }
+                    for (let i = 0; i < logits.length; i++) {
+                        logits[i] /= sum;
+                    }
+                    return { policy: logits, value };
+                }
+
+                async simulate(game) {
+                    let node = this.root;
+                    const gameCopy = game.copy();
+                    while (!node.isLeaf()) {
+                        const [moveKey, child] = this.selectChild(node, gameCopy);
+                        if (!child) {
+                            this.backpropagate(node, 0);
+                            return;
+                        }
+                        const [r, c] = moveKey.split(',').map(Number);
+                        gameCopy.unsafeMakeMove(r, c);
+                        node = child;
+                    }
+                    if (gameCopy.gameOver) {
+                        const v = gameCopy.winner === 0 ? 0 : -1;
+                        this.backpropagate(node, v);
+                        return;
+                    }
+                    const state = gameCopy.getCanonicalState();
+                    const mask = gameCopy.getLegalMovesMask();
+                    const { policy, value } = await this.inference(state, mask);
+                    const legalMoves = gameCopy.getLegalMoves();
+                    const moveProbs = {};
+                    let total = 0;
+                    for (const [r, c] of legalMoves) {
+                        const idx = r * this.boardSize + c;
+                        const prob = policy[idx];
+                        moveProbs[`${r},${c}`] = prob;
+                        total += prob;
+                    }
+                    if (total > 0) {
+                        for (const key in moveProbs) moveProbs[key] /= total;
+                    } else {
+                        const p = 1 / legalMoves.length;
+                        for (const [r, c] of legalMoves) moveProbs[`${r},${c}`] = p;
+                    }
+                    node.expanded = true;
+                    for (const [r, c] of legalMoves) {
+                        const key = `${r},${c}`;
+                        node.children.set(key, new MCTSNode(node, moveProbs[key]));
+                    }
+                    this.backpropagate(node, value);
+                }
+
+                selectChild(node, game) {
+                    const children = node.children;
+                    if (children.size === 0) return [null, null];
+                    const legalKeys = [];
+                    for (const key of children.keys()) {
+                        const [r, c] = key.split(',').map(Number);
+                        if (game.isLegalMove(r, c)) legalKeys.push(key);
+                    }
+                    if (legalKeys.length === 0) return [null, null];
+                    let bestKey = legalKeys[0];
+                    let bestScore = -Infinity;
+                    const sqrtParent = Math.sqrt(1 + node.visitCount);
+                    const parentValue = node.getValue();
+                    for (const key of legalKeys) {
+                        const child = children.get(key);
+                        const visits = child.visitCount;
+                        const qVal = visits === 0 ? parentValue : -child.getValue();
+                        const uVal = this.c_puct * child.priorProb * sqrtParent / (1 + visits);
+                        const score = qVal + uVal;
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestKey = key;
+                        }
+                    }
+                    return [bestKey, children.get(bestKey)];
+                }
+
+                backpropagate(node, value) {
+                    let current = node;
+                    let v = value;
+                    while (current) {
+                        current.visitCount++;
+                        current.valueSum += v;
+                        v = -v;
+                        current = current.parent;
+                    }
+                }
+
+                async search(game, onProgress = null) {
+                    if (!this.root) {
+                        await this.initRoot(game);
+                        if (!this.root) return null;
+                    }
+                    const total = this.numSimulations;
+                    const batchSize = 5;
+                    for (let i = 0; i < total; i += batchSize) {
+                        const end = Math.min(i + batchSize, total);
+                        for (let j = i; j < end; j++) {
+                            await this.simulate(game);
+                        }
+                        if (onProgress) {
+                            const pct = Math.min(100, Math.round((end / total) * 100));
+                            onProgress(pct);
+                        }
+                        await new Promise(r => setTimeout(r, 0));
+                    }
+                    return this.getBestMove(game);
+                }
+
+                getBestMove(game) {
+                    if (!this.root || this.root.children.size === 0) return null;
+                    const legalKeys = [];
+                    for (const key of this.root.children.keys()) {
+                        const [r, c] = key.split(',').map(Number);
+                        if (game.isLegalMove(r, c)) legalKeys.push(key);
+                    }
+                    if (legalKeys.length === 0) return null;
+                    // temperature=0 总是选择访问次数最多的
+                    let bestKey = legalKeys[0];
+                    let bestVisits = -1;
+                    for (const key of legalKeys) {
+                        const visits = this.root.children.get(key).visitCount;
+                        if (visits > bestVisits) {
+                            bestVisits = visits;
+                            bestKey = key;
+                        }
+                    }
+                    const [r, c] = bestKey.split(',').map(Number);
+                    return [r, c];
+                }
+
+                getWinRate(game) {
+                    if (!this.root || this.root.children.size === 0) return 0.5;
+                    let totalVisits = 0,
+                        weightedValue = 0;
+                    for (const child of this.root.children.values()) {
+                        totalVisits += child.visitCount;
+                        weightedValue += child.getValue() * child.visitCount;
+                    }
+                    if (totalVisits === 0) return 0.5;
+                    const avgValue = weightedValue / totalVisits;
+                    if (game.currentPlayer === 1) {
+                        return (1 - avgValue) / 2;
+                    } else {
+                        return (1 + avgValue) / 2;
+                    }
+                }
+            }
+
+            // ---------- 主应用 ----------
+            class GomokuApp {
+                constructor() {
+                    this.game = new GomokuGame();
+                    this.mcts = null;
+                    this.isAIThinking = false;
+                    this.isGameOver = false;
+                    this.isModelReady = false;
+                    this.moveCount = 0;
+                    this.history = [];
+                    // 玩家执子：'black' 或 'white'
+                    this.playerColor = 'black';
+
+                    // DOM
+                    this.statusEl = statusEl;
+                    this.winBlack = winBlack;
+                    this.winWhite = winWhite;
+                    this.winrateText = winrateText;
+                    this.colorSelect = colorSelect;
+                    this.simRadios = simRadios;
+                    this.moveCountEl = moveCountEl;
+                    this.turnInfoEl = turnInfoEl;
+                    this.modelStatusEl = modelStatusEl;
+
+                    // 事件
+                    canvas.addEventListener('click', this.onCanvasClick.bind(this));
+                    resetBtn.addEventListener('click', this.resetGame.bind(this));
+                    undoBtn.addEventListener('click', this.undoMove.bind(this));
+                    colorSelect.addEventListener('change', () => { this.resetGame(); });
+                    simRadios.forEach(radio => {
+                        radio.addEventListener('change', () => {
+                            if (this.mcts) {
+                                const val = parseInt(document.querySelector('input[name="simLevel"]:checked').value);
+                                this.mcts.numSimulations = val;
+                            }
+                        });
+                    });
+
+                    this.draw();
+                    this.updateStatus('⏳ 加载模型中...');
+                    this.modelStatusEl.textContent = '⏳ 正在加载 ONNX 模型...';
+                    this.loadModel();
+                }
+
+                async loadModel() {
+                    try {
+                        if (typeof ort === 'undefined') {
+                            throw new Error('ONNX Runtime 未加载，请检查网络。');
+                        }
+                        const session = await ort.InferenceSession.create('distill_model.onnx', {
+                            executionProviders: ['wasm'],
+                            graphOptimizationLevel: 'all',
+                        });
+
+                        const simVal = parseInt(document.querySelector('input[name="simLevel"]:checked').value);
+                        this.mcts = new MCTS(session, { numSimulations: simVal });
+                        this.isModelReady = true;
+                        this.modelStatusEl.textContent = '✅ 模型加载成功';
+                        this.modelStatusEl.className = 'model-status loaded';
+                        await this.resetGame();
+
+                    } catch (err) {
+                        console.error('模型加载失败:', err);
+                        this.modelStatusEl.textContent = `❌ 模型加载失败: ${err.message || '未知错误'}`;
+                        this.modelStatusEl.className = 'model-status error';
+                        this.updateStatus('⚠️ 模型加载失败');
+                        alert('加载失败，请确保:\n1. distill_model.onnx 与 HTML 同目录\n2. 使用本地服务器运行\n3. 网络可访问 CDN\n\n错误: ' + err.message);
+                    }
+                }
+
+                async resetGame() {
+                    this.isAIThinking = false;
+                    this.game.reset();
+                    this.moveCount = 0;
+                    this.history = [];
+                    this.isGameOver = false;
+
+                    // 读取执子
+                    this.playerColor = this.colorSelect.value; // 'black' or 'white'
+
+                    // 设置当前玩家：如果玩家执黑，则玩家先手（1），否则AI先手（-1）
+                    if (this.playerColor === 'black') {
+                        this.game.currentPlayer = 1;
+                    } else {
+                        this.game.currentPlayer = -1; // AI执黑先手
+                    }
+
+                    // 更新MCTS根
+                    if (this.mcts) {
+                        const simVal = parseInt(document.querySelector('input[name="simLevel"]:checked').value);
+                        this.mcts.numSimulations = simVal;
+                        await this.mcts.initRoot(this.game);
+                    }
+
+                    this.draw();
+                    this.updateMoveCount();
+                    this.updateWinRate();
+                    this.updateTurnInfo();
+
+                    // 如果AI先手（玩家执白），自动走一步
+                    if (this.playerColor === 'white' && !this.game.gameOver && this.game.currentPlayer === -1) {
+                        await this.doAIMove();
+                    } else {
+                        this.updateStatus('你的回合');
+                    }
+                }
+
+                async undoMove() {
+                    if (this.isAIThinking) return;
+                    if (this.history.length === 0) return;
+                    let undone = 0;
+                    while (this.history.length > 0 && undone < 2) {
+                        const last = this.history.pop();
+                        const [r, c] = last.move;
+                        this.game.board[r][c] = 0;
+                        this.game.currentPlayer = last.player;
+                        this.game.gameOver = false;
+                        this.game.winner = 0;
+                        this.game.lastMove = this.history.length > 0 ? this.history[this.history.length - 1].move : null;
+                        this.moveCount--;
+                        undone++;
+                    }
+                    this.isGameOver = false;
+                    if (this.mcts) {
+                        await this.mcts.initRoot(this.game);
+                    }
+                    this.draw();
+                    this.updateMoveCount();
+                    this.updateWinRate();
+                    this.updateTurnInfo();
+                    this.updateStatus('已悔棋，你的回合');
+                }
+
+                onCanvasClick(event) {
+                    if (this.isAIThinking) return;
+                    if (this.isGameOver) return;
+                    if (!this.isModelReady) return;
+                    // 只有玩家执黑且当前玩家为黑（1）或者玩家执白且当前玩家为白（-1）时才允许点击
+                    const isPlayerTurn = (this.playerColor === 'black' && this.game.currentPlayer === 1) ||
+                        (this.playerColor === 'white' && this.game.currentPlayer === -1);
+                    if (!isPlayerTurn) {
+                        this.updateStatus('请等待 AI 思考...');
+                        return;
+                    }
+
+                    const rect = canvas.getBoundingClientRect();
+                    const scaleX = canvas.width / rect.width;
+                    const scaleY = canvas.height / rect.height;
+                    const x = (event.clientX - rect.left) * scaleX;
+                    const y = (event.clientY - rect.top) * scaleY;
+                    const col = Math.round((x - MARGIN) / CELL_SIZE);
+                    const row = Math.round((y - MARGIN) / CELL_SIZE);
+                    if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return;
+                    if (!this.game.isLegalMove(row, col)) return;
+                    this.doPlayerMove(row, col);
+                }
+
+                doPlayerMove(row, col) {
+                    if (!this.game.isLegalMove(row, col)) return;
+                    this.game.makeMove(row, col);
+                    this.moveCount++;
+                    this.history.push({ move: [row, col], player: this.game.currentPlayer === 1 ? -1 : 1 });
+                    this.draw();
+                    this.updateMoveCount();
+                    if (this.game.gameOver) {
+                        this.handleGameOver();
+                        return;
+                    }
+                    if (this.mcts) {
+                        this.mcts.updateRoot(this.game, [row, col]);
+                    }
+                    // 如果游戏未结束，轮到AI
+                    if (!this.game.gameOver) {
+                        this.doAIMove();
+                    }
+                }
+
+                async doAIMove() {
+                    if (this.isAIThinking) return;
+                    if (this.isGameOver) return;
+                    if (!this.mcts) return;
+                    this.isAIThinking = true;
+                    this.updateStatus('🤖 AI 思考中...');
+
+                    try {
+                        const legalMoves = this.game.getLegalMoves();
+                        // 直接获胜
+                        for (const [r, c] of legalMoves) {
+                            const test = this.game.copy();
+                            const aiPlayer = this.game.currentPlayer;
+                            test.board[r][c] = aiPlayer;
+                            if (test.checkWin(r, c)) {
+                                this.game.makeMove(r, c);
+                                this.moveCount++;
+                                this.history.push({ move: [r, c], player: aiPlayer });
+                                this.draw();
+                                this.updateMoveCount();
+                                this.isAIThinking = false;
+                                if (this.game.gameOver) this.handleGameOver();
+                                else { this.updateStatus('你的回合');
+                                    this.updateWinRate();
+                                    this.updateTurnInfo(); }
+                                return;
+                            }
+                        }
+                        // 防守（对手下一步获胜）
+                        const opponent = -this.game.currentPlayer;
+                        for (const [r, c] of legalMoves) {
+                            const test = this.game.copy();
+                            test.board[r][c] = opponent;
+                            if (test.checkWin(r, c)) {
+                                this.game.makeMove(r, c);
+                                this.moveCount++;
+                                this.history.push({ move: [r, c], player: this.game.currentPlayer });
+                                this.draw();
+                                this.updateMoveCount();
+                                this.isAIThinking = false;
+                                if (this.game.gameOver) this.handleGameOver();
+                                else { this.updateStatus('你的回合');
+                                    this.updateWinRate();
+                                    this.updateTurnInfo(); }
+                                return;
+                            }
+                        }
+
+                        // MCTS 搜索
+                        const move = await this.mcts.search(this.game, null); // 无进度回调
+                        if (!move) {
+                            this.isAIThinking = false;
+                            this.updateStatus('⚠️ AI 无法找到合法走法');
+                            return;
+                        }
+                        const [r, c] = move;
+                        if (!this.game.isLegalMove(r, c)) {
+                            this.isAIThinking = false;
+                            this.updateStatus('⚠️ AI 选择了非法走法，请重试');
+                            return;
+                        }
+                        this.game.makeMove(r, c);
+                        this.moveCount++;
+                        this.history.push({ move: [r, c], player: this.game.currentPlayer === 1 ? -1 : 1 });
+                        this.draw();
+                        this.updateMoveCount();
+                        this.updateWinRate();
+                        this.isAIThinking = false;
+
+                        if (this.game.gameOver) {
+                            this.handleGameOver();
+                        } else {
+                            this.updateStatus('你的回合');
+                            this.updateTurnInfo();
+                            if (this.mcts) {
+                                this.mcts.updateRoot(this.game, [r, c]);
+                            }
+                        }
+                    } catch (err) {
+                        console.error('AI 搜索错误:', err);
+                        this.isAIThinking = false;
+                        this.updateStatus('⚠️ AI 出错: ' + err.message);
+                    }
+                }
+
+                handleGameOver() {
+                    this.isGameOver = true;
+                    const winner = this.game.winner;
+                    if (winner === 1) {
+                        if (this.playerColor === 'black') {
+                            this.updateStatus('🎉 你赢了！');
+                            this.statusEl.className = 'status win';
+                        } else {
+                            this.updateStatus('🤖 AI 赢了！');
+                            this.statusEl.className = 'status lose';
+                        }
+                    } else if (winner === -1) {
+                        if (this.playerColor === 'white') {
+                            this.updateStatus('🎉 你赢了！');
+                            this.statusEl.className = 'status win';
+                        } else {
+                            this.updateStatus('🤖 AI 赢了！');
+                            this.statusEl.className = 'status lose';
+                        }
+                    } else {
+                        this.updateStatus('🤝 平局！');
+                        this.statusEl.className = 'status';
+                    }
+                    this.turnInfoEl.textContent = '游戏结束';
+                    this.draw();
+                }
+
+                updateStatus(text) {
+                    this.statusEl.innerHTML = text;
+                    if (!text.includes('赢') && !text.includes('平局')) {
+                        this.statusEl.className = 'status';
+                    }
+                }
+
+                updateMoveCount() {
+                    this.moveCountEl.textContent = this.moveCount;
+                }
+
+                updateTurnInfo() {
+                    if (this.game.gameOver) {
+                        this.turnInfoEl.textContent = '已结束';
+                        return;
+                    }
+                    const isPlayerTurn = (this.playerColor === 'black' && this.game.currentPlayer === 1) ||
+                        (this.playerColor === 'white' && this.game.currentPlayer === -1);
+                    this.turnInfoEl.textContent = isPlayerTurn ? '你的回合' : 'AI 思考中...';
+                }
+
+                updateWinRate() {
+                    if (!this.mcts || !this.mcts.root) {
+                        this.winBlack.style.width = '50%';
+                        this.winWhite.style.width = '50%';
+                        this.winrateText.textContent = '50% / 50%';
+                        return;
+                    }
+                    const wr = this.mcts.getWinRate(this.game);
+                    // 黑棋胜率 = 当前玩家视角转换为黑棋视角
+                    const blackWr = this.game.currentPlayer === 1 ? wr : 1 - wr;
+                    const whiteWr = 1 - blackWr;
+                    const bw = Math.max(0, Math.min(100, Math.round(blackWr * 100)));
+                    this.winBlack.style.width = bw + '%';
+                    this.winWhite.style.width = (100 - bw) + '%';
+                    this.winrateText.textContent = `${bw}% / ${100 - bw}%`;
+                }
+
+                // ============================================================
+                //  绘制（修复阴影）
+                // ============================================================
+                draw() {
+                    const W = CANVAS_SIZE,
+                        H = CANVAS_SIZE;
+                    ctx.clearRect(0, 0, W, H);
+
+                    // 背景
+                    const grad = ctx.createRadialGradient(W / 2, H / 2, 50, W / 2, H / 2, W * 0.7);
+                    grad.addColorStop(0, '#e8c88a');
+                    grad.addColorStop(1, '#c9a56a');
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(0, 0, W, H);
+
+                    // 网格
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 0;
+                    ctx.strokeStyle = '#5a3e2b';
+                    ctx.lineWidth = 0.8;
+                    for (let i = 0; i < BOARD_SIZE; i++) {
+                        const x = MARGIN + i * CELL_SIZE;
+                        const y = MARGIN + i * CELL_SIZE;
+                        ctx.beginPath();
+                        ctx.moveTo(MARGIN, y);
+                        ctx.lineTo(MARGIN + (BOARD_SIZE - 1) * CELL_SIZE, y);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(x, MARGIN);
+                        ctx.lineTo(x, MARGIN + (BOARD_SIZE - 1) * CELL_SIZE);
+                        ctx.stroke();
+                    }
+
+                    // 星位
+                    const stars = [
+                        [3, 3],
+                        [11, 3],
+                        [7, 7],
+                        [3, 11],
+                        [11, 11]
+                    ];
+                    ctx.fillStyle = '#5a3e2b';
+                    for (const [r, c] of stars) {
+                        const x = MARGIN + c * CELL_SIZE,
+                            y = MARGIN + r * CELL_SIZE;
+                        ctx.beginPath();
+                        ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                        ctx.fill();
+                    }
+
+                    // 棋子
+                    for (let r = 0; r < BOARD_SIZE; r++) {
+                        for (let c = 0; c < BOARD_SIZE; c++) {
+                            const val = this.game.board[r][c];
+                            if (val === 0) continue;
+                            const x = MARGIN + c * CELL_SIZE,
+                                y = MARGIN + r * CELL_SIZE;
+                            const radius = CELL_SIZE * 0.42;
+                            const isBlack = val === 1;
+
+                            ctx.shadowColor = 'rgba(0,0,0,0.3)';
+                            ctx.shadowBlur = 8;
+                            ctx.shadowOffsetX = 2;
+                            ctx.shadowOffsetY = 2;
+
+                            const grad2 = ctx.createRadialGradient(
+                                x - radius * 0.3, y - radius * 0.3, radius * 0.1,
+                                x, y, radius
+                            );
+                            if (isBlack) {
+                                grad2.addColorStop(0, '#666');
+                                grad2.addColorStop(0.7, '#1a1a1a');
+                                grad2.addColorStop(1, '#000');
+                            } else {
+                                grad2.addColorStop(0, '#ffffff');
+                                grad2.addColorStop(0.7, '#f0f0f0');
+                                grad2.addColorStop(1, '#d0d0d0');
+                            }
+                            ctx.beginPath();
+                            ctx.arc(x, y, radius, 0, 2 * Math.PI);
+                            ctx.fillStyle = grad2;
+                            ctx.fill();
+
+                            // 重置阴影
+                            ctx.shadowColor = 'transparent';
+                            ctx.shadowBlur = 0;
+                            ctx.shadowOffsetX = 0;
+                            ctx.shadowOffsetY = 0;
+
+                            if (!isBlack) {
+                                ctx.strokeStyle = '#bbb';
+                                ctx.lineWidth = 0.5;
+                                ctx.stroke();
+                            }
+                        }
+                    }
+
+                    // 高亮最后一步
+                    if (this.game.lastMove) {
+                        const [lr, lc] = this.game.lastMove;
+                        const x = MARGIN + lc * CELL_SIZE,
+                            y = MARGIN + lr * CELL_SIZE;
+                        ctx.shadowColor = 'transparent';
+                        ctx.shadowBlur = 0;
+                        ctx.fillStyle = 'rgba(255, 50, 50, 0.7)';
+                        ctx.beginPath();
+                        ctx.arc(x, y, 6, 0, 2 * Math.PI);
+                        ctx.fill();
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+                        ctx.beginPath();
+                        ctx.arc(x, y, 3, 0, 2 * Math.PI);
+                        ctx.fill();
+                    }
+
+                    // 游戏结束遮罩
+                    if (this.game.gameOver) {
+                        ctx.shadowColor = 'transparent';
+                        ctx.shadowBlur = 0;
+                        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+                        ctx.fillRect(0, 0, W, H);
+                        ctx.fillStyle = '#fff';
+                        ctx.font = 'bold 40px "Microsoft YaHei", sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                        ctx.shadowBlur = 20;
+                        let txt = this.game.winner === 1 ? '🏆 你赢了' :
+                            this.game.winner === -1 ? '🤖 AI 赢了' : '🤝 平局';
+                        ctx.fillText(txt, W / 2, H / 2);
+                        ctx.shadowBlur = 0;
+                        ctx.shadowColor = 'transparent';
+                    }
+
+                    // 坐标
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = '#5a3e2b';
+                    ctx.font = '12px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'top';
+                    for (let i = 0; i < BOARD_SIZE; i++) {
+                        const x = MARGIN + i * CELL_SIZE;
+                        ctx.fillText(String.fromCharCode(65 + i), x, 4);
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(BOARD_SIZE - i, 4, MARGIN + i * CELL_SIZE);
+                        ctx.textBaseline = 'top';
+                    }
+                }
+            }
+
+            // ---------- 启动 ----------
+            if (document.readyState === 'complete') {
+                new GomokuApp();
+            } else {
+                window.addEventListener('load', () => {
+                    new GomokuApp();
+                });
+            }
+
+            if (typeof ort === 'undefined') {
+                console.error('ONNX Runtime 未加载');
+                document.getElementById('modelStatus').textContent = '❌ ONNX Runtime 加载失败';
+                document.getElementById('modelStatus').className = 'model-status error';
+            }
+
+        })();
     </script>
 </body>
 </html>
