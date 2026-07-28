@@ -291,11 +291,9 @@
                     <div class="divider"></div>
                 </div>
                 <span>⚪</span>
-                <span class="winrate-text" id="winrateText">50% / 50%</span>
             </div>
 
             <div class="param-group">
-                <!-- 执子选择 -->
                 <div class="param-row">
                     <span>执子</span>
                     <select id="colorSelect">
@@ -303,9 +301,8 @@
                         <option value="white">白棋 (后手)</option>
                     </select>
                 </div>
-                <!-- 模拟次数三选一 -->
                 <div class="param-row">
-                    <span>强度</span>
+                    <span>难度</span>
                     <div class="radio-group" id="simGroup">
                         <label><input type="radio" name="simLevel" value="50" /> 简单</label>
                         <label><input type="radio" name="simLevel" value="200" checked /> 普通</label>
@@ -364,7 +361,7 @@
                 }
                 reset() {
                     this.board = Array.from({ length: this.size }, () => Array(this.size).fill(0));
-                    this.currentPlayer = 1; // 1=黑, -1=白
+                    this.currentPlayer = 1;
                     this.winner = 0;
                     this.gameOver = false;
                     this.moveHistory = [];
@@ -491,9 +488,9 @@
             class MCTS {
                 constructor(ortSession, config = {}) {
                     this.session = ortSession;
-                    this.c_puct = 1.5; // 固定
+                    this.c_puct = 1.5;
                     this.numSimulations = config.numSimulations || 200;
-                    this.temperature = 0.0; // 固定为确定性
+                    this.temperature = 0.0;
                     this.boardSize = BOARD_SIZE;
                     this.root = null;
                     this.inputData = new Float32Array(1 * 2 * this.boardSize * this.boardSize);
@@ -527,15 +524,20 @@
                     }
                 }
 
+                // ---- 修复：updateRoot 改为纯同步，不再异步调用 initRoot ----
                 updateRoot(game, lastMove) {
-                    if (!this.root) return;
+                    if (!this.root) {
+                        this.root = null;
+                        return;
+                    }
                     const key = `${lastMove[0]},${lastMove[1]}`;
                     if (this.root.children.has(key)) {
                         const newRoot = this.root.children.get(key);
                         newRoot.parent = null;
                         this.root = newRoot;
                     } else {
-                        this.initRoot(game);
+                        // 找不到对应子节点，标记为需要重新初始化
+                        this.root = null;
                     }
                 }
 
@@ -648,6 +650,7 @@
                     }
                 }
 
+                // ---- 修复：search 开头检查 root 是否为 null，并重新初始化 ----
                 async search(game, onProgress = null) {
                     if (!this.root) {
                         await this.initRoot(game);
@@ -677,7 +680,6 @@
                         if (game.isLegalMove(r, c)) legalKeys.push(key);
                     }
                     if (legalKeys.length === 0) return null;
-                    // temperature=0 总是选择访问次数最多的
                     let bestKey = legalKeys[0];
                     let bestVisits = -1;
                     for (const key of legalKeys) {
@@ -691,22 +693,16 @@
                     return [r, c];
                 }
 
-                getWinRate(game) {
-                    if (!this.root || this.root.children.size === 0) return 0.5;
-                    let totalVisits = 0,
-                        weightedValue = 0;
-                    for (const child of this.root.children.values()) {
+                  getAvgValue() {
+                  if (!this.root || this.root.children.size === 0) return 0;
+                  let totalVisits = 0, weightedValue = 0;
+                  for (const child of this.root.children.values()) {
                         totalVisits += child.visitCount;
                         weightedValue += child.getValue() * child.visitCount;
-                    }
-                    if (totalVisits === 0) return 0.5;
-                    const avgValue = weightedValue / totalVisits;
-                    if (game.currentPlayer === 1) {
-                        return (1 - avgValue) / 2;
-                    } else {
-                        return (1 + avgValue) / 2;
-                    }
-                }
+                  }
+                  if (totalVisits === 0) return 0;
+                  return weightedValue / totalVisits;
+                  }
             }
 
             // ---------- 主应用 ----------
@@ -719,10 +715,8 @@
                     this.isModelReady = false;
                     this.moveCount = 0;
                     this.history = [];
-                    // 玩家执子：'black' 或 'white'
                     this.playerColor = 'black';
 
-                    // DOM
                     this.statusEl = statusEl;
                     this.winBlack = winBlack;
                     this.winWhite = winWhite;
@@ -733,7 +727,6 @@
                     this.turnInfoEl = turnInfoEl;
                     this.modelStatusEl = modelStatusEl;
 
-                    // 事件
                     canvas.addEventListener('click', this.onCanvasClick.bind(this));
                     resetBtn.addEventListener('click', this.resetGame.bind(this));
                     undoBtn.addEventListener('click', this.undoMove.bind(this));
@@ -741,7 +734,8 @@
                     simRadios.forEach(radio => {
                         radio.addEventListener('change', () => {
                             if (this.mcts) {
-                                const val = parseInt(document.querySelector('input[name="simLevel"]:checked').value);
+                                const val = parseInt(document.querySelector('input[name="simLevel"]:checked')
+                                .value);
                                 this.mcts.numSimulations = val;
                             }
                         });
@@ -779,42 +773,35 @@
                     }
                 }
 
-                async resetGame() {
-                    this.isAIThinking = false;
-                    this.game.reset();
-                    this.moveCount = 0;
-                    this.history = [];
-                    this.isGameOver = false;
+                  async resetGame() {
+                  this.isAIThinking = false;
+                  this.game.reset();
+                  this.moveCount = 0;
+                  this.history = [];
+                  this.isGameOver = false;
 
-                    // 读取执子
-                    this.playerColor = this.colorSelect.value; // 'black' or 'white'
+                  this.playerColor = this.colorSelect.value;
+                  // ✅ 黑棋先手（始终为 1）
+                  this.game.currentPlayer = 1;
 
-                    // 设置当前玩家：如果玩家执黑，则玩家先手（1），否则AI先手（-1）
-                    if (this.playerColor === 'black') {
-                        this.game.currentPlayer = 1;
-                    } else {
-                        this.game.currentPlayer = -1; // AI执黑先手
-                    }
-
-                    // 更新MCTS根
-                    if (this.mcts) {
+                  if (this.mcts) {
                         const simVal = parseInt(document.querySelector('input[name="simLevel"]:checked').value);
                         this.mcts.numSimulations = simVal;
                         await this.mcts.initRoot(this.game);
-                    }
+                  }
 
-                    this.draw();
-                    this.updateMoveCount();
-                    this.updateWinRate();
-                    this.updateTurnInfo();
+                  this.draw();
+                  this.updateMoveCount();
+                  this.updateWinRate();
+                  this.updateTurnInfo();
 
-                    // 如果AI先手（玩家执白），自动走一步
-                    if (this.playerColor === 'white' && !this.game.gameOver && this.game.currentPlayer === -1) {
-                        await this.doAIMove();
-                    } else {
+                  // 如果玩家执白，AI 执黑先手，让 AI 走一步
+                  if (this.playerColor === 'white' && !this.game.gameOver) {
+                        await this.doAIMove();  // AI 会使用 currentPlayer=1（黑棋）
+                  } else {
                         this.updateStatus('你的回合');
-                    }
-                }
+                  }
+                  }
 
                 async undoMove() {
                     if (this.isAIThinking) return;
@@ -846,7 +833,7 @@
                     if (this.isAIThinking) return;
                     if (this.isGameOver) return;
                     if (!this.isModelReady) return;
-                    // 只有玩家执黑且当前玩家为黑（1）或者玩家执白且当前玩家为白（-1）时才允许点击
+
                     const isPlayerTurn = (this.playerColor === 'black' && this.game.currentPlayer === 1) ||
                         (this.playerColor === 'white' && this.game.currentPlayer === -1);
                     if (!isPlayerTurn) {
@@ -863,24 +850,29 @@
                     const row = Math.round((y - MARGIN) / CELL_SIZE);
                     if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return;
                     if (!this.game.isLegalMove(row, col)) return;
+
                     this.doPlayerMove(row, col);
                 }
 
                 doPlayerMove(row, col) {
                     if (!this.game.isLegalMove(row, col)) return;
+                    const playerBefore = this.game.currentPlayer;
                     this.game.makeMove(row, col);
                     this.moveCount++;
-                    this.history.push({ move: [row, col], player: this.game.currentPlayer === 1 ? -1 : 1 });
+                    this.history.push({ move: [row, col], player: playerBefore });
                     this.draw();
                     this.updateMoveCount();
+
                     if (this.game.gameOver) {
                         this.handleGameOver();
                         return;
                     }
+
+                    // 更新 MCTS 根节点
                     if (this.mcts) {
                         this.mcts.updateRoot(this.game, [row, col]);
                     }
-                    // 如果游戏未结束，轮到AI
+
                     if (!this.game.gameOver) {
                         this.doAIMove();
                     }
@@ -890,15 +882,18 @@
                     if (this.isAIThinking) return;
                     if (this.isGameOver) return;
                     if (!this.mcts) return;
+
                     this.isAIThinking = true;
                     this.updateStatus('🤖 AI 思考中...');
 
                     try {
                         const legalMoves = this.game.getLegalMoves();
-                        // 直接获胜
+                        const aiPlayer = this.game.currentPlayer;
+                        const opponent = -aiPlayer;
+
+                        // 1. 直接获胜
                         for (const [r, c] of legalMoves) {
                             const test = this.game.copy();
-                            const aiPlayer = this.game.currentPlayer;
                             test.board[r][c] = aiPlayer;
                             if (test.checkWin(r, c)) {
                                 this.game.makeMove(r, c);
@@ -906,36 +901,50 @@
                                 this.history.push({ move: [r, c], player: aiPlayer });
                                 this.draw();
                                 this.updateMoveCount();
+                                // ---- 修复：快速路径也更新 MCTS 根节点 ----
+                                if (this.mcts) {
+                                    this.mcts.updateRoot(this.game, [r, c]);
+                                }
                                 this.isAIThinking = false;
-                                if (this.game.gameOver) this.handleGameOver();
-                                else { this.updateStatus('你的回合');
+                                if (this.game.gameOver) {
+                                    this.handleGameOver();
+                                } else {
+                                    this.updateStatus('你的回合');
                                     this.updateWinRate();
-                                    this.updateTurnInfo(); }
+                                    this.updateTurnInfo();
+                                }
                                 return;
                             }
                         }
-                        // 防守（对手下一步获胜）
-                        const opponent = -this.game.currentPlayer;
+
+                        // 2. 防守（对手下一步获胜）
                         for (const [r, c] of legalMoves) {
                             const test = this.game.copy();
                             test.board[r][c] = opponent;
                             if (test.checkWin(r, c)) {
                                 this.game.makeMove(r, c);
                                 this.moveCount++;
-                                this.history.push({ move: [r, c], player: this.game.currentPlayer });
+                                this.history.push({ move: [r, c], player: aiPlayer });
                                 this.draw();
                                 this.updateMoveCount();
+                                // ---- 修复：快速路径也更新 MCTS 根节点 ----
+                                if (this.mcts) {
+                                    this.mcts.updateRoot(this.game, [r, c]);
+                                }
                                 this.isAIThinking = false;
-                                if (this.game.gameOver) this.handleGameOver();
-                                else { this.updateStatus('你的回合');
+                                if (this.game.gameOver) {
+                                    this.handleGameOver();
+                                } else {
+                                    this.updateStatus('你的回合');
                                     this.updateWinRate();
-                                    this.updateTurnInfo(); }
+                                    this.updateTurnInfo();
+                                }
                                 return;
                             }
                         }
 
-                        // MCTS 搜索
-                        const move = await this.mcts.search(this.game, null); // 无进度回调
+                        // 3. MCTS 搜索
+                        const move = await this.mcts.search(this.game, null);
                         if (!move) {
                             this.isAIThinking = false;
                             this.updateStatus('⚠️ AI 无法找到合法走法');
@@ -947,11 +956,16 @@
                             this.updateStatus('⚠️ AI 选择了非法走法，请重试');
                             return;
                         }
+
                         this.game.makeMove(r, c);
                         this.moveCount++;
-                        this.history.push({ move: [r, c], player: this.game.currentPlayer === 1 ? -1 : 1 });
+                        this.history.push({ move: [r, c], player: aiPlayer });
                         this.draw();
                         this.updateMoveCount();
+
+                        if (this.mcts) {
+                            this.mcts.updateRoot(this.game, [r, c]);
+                        }
                         this.updateWinRate();
                         this.isAIThinking = false;
 
@@ -960,9 +974,6 @@
                         } else {
                             this.updateStatus('你的回合');
                             this.updateTurnInfo();
-                            if (this.mcts) {
-                                this.mcts.updateRoot(this.game, [r, c]);
-                            }
                         }
                     } catch (err) {
                         console.error('AI 搜索错误:', err);
@@ -1019,39 +1030,50 @@
                     this.turnInfoEl.textContent = isPlayerTurn ? '你的回合' : 'AI 思考中...';
                 }
 
-                updateWinRate() {
-                    if (!this.mcts || !this.mcts.root) {
+                  updateWinRate() {
+                  // 若 MCTS 未初始化或无访问记录，显示 50/50
+                  if (!this.mcts || !this.mcts.root || this.mcts.root.visitCount === 0) {
                         this.winBlack.style.width = '50%';
                         this.winWhite.style.width = '50%';
-                        this.winrateText.textContent = '50% / 50%';
                         return;
-                    }
-                    const wr = this.mcts.getWinRate(this.game);
-                    // 黑棋胜率 = 当前玩家视角转换为黑棋视角
-                    const blackWr = this.game.currentPlayer === 1 ? wr : 1 - wr;
-                    const whiteWr = 1 - blackWr;
-                    const bw = Math.max(0, Math.min(100, Math.round(blackWr * 100)));
-                    this.winBlack.style.width = bw + '%';
-                    this.winWhite.style.width = (100 - bw) + '%';
-                    this.winrateText.textContent = `${bw}% / ${100 - bw}%`;
-                }
+                  }
 
-                // ============================================================
-                //  绘制（修复阴影）
-                // ============================================================
+                  const root = this.mcts.root;
+                  // 根节点视角的平均价值（范围 -1 ~ 1）
+                  const avgValue = root.valueSum / root.visitCount;
+                  // 根节点视角的胜率（0 ~ 1）
+                  const curWinRate = (avgValue + 1) / 2;
+
+                  // 计算黑棋胜率
+                  let blackWinRate;
+                  if (this.game.currentPlayer === 1) {
+                        // 当前玩家是黑，黑胜率 = 当前玩家胜率
+                        blackWinRate = curWinRate;
+                  } else {
+                        // 当前玩家是白，黑胜率 = 1 - 白胜率
+                        blackWinRate = 1 - curWinRate;
+                  }
+
+                  // 边界限制
+                  blackWinRate = Math.max(0, Math.min(1, blackWinRate));
+                  const blackPct = Math.round(blackWinRate * 100);
+                  const whitePct = 100 - blackPct;
+
+                  this.winBlack.style.width = blackPct + '%';
+                  this.winWhite.style.width = whitePct + '%';
+                  }
+
                 draw() {
                     const W = CANVAS_SIZE,
                         H = CANVAS_SIZE;
                     ctx.clearRect(0, 0, W, H);
 
-                    // 背景
                     const grad = ctx.createRadialGradient(W / 2, H / 2, 50, W / 2, H / 2, W * 0.7);
                     grad.addColorStop(0, '#e8c88a');
                     grad.addColorStop(1, '#c9a56a');
                     ctx.fillStyle = grad;
                     ctx.fillRect(0, 0, W, H);
 
-                    // 网格
                     ctx.shadowColor = 'transparent';
                     ctx.shadowBlur = 0;
                     ctx.shadowOffsetX = 0;
@@ -1071,7 +1093,6 @@
                         ctx.stroke();
                     }
 
-                    // 星位
                     const stars = [
                         [3, 3],
                         [11, 3],
@@ -1088,7 +1109,6 @@
                         ctx.fill();
                     }
 
-                    // 棋子
                     for (let r = 0; r < BOARD_SIZE; r++) {
                         for (let c = 0; c < BOARD_SIZE; c++) {
                             const val = this.game.board[r][c];
@@ -1121,7 +1141,6 @@
                             ctx.fillStyle = grad2;
                             ctx.fill();
 
-                            // 重置阴影
                             ctx.shadowColor = 'transparent';
                             ctx.shadowBlur = 0;
                             ctx.shadowOffsetX = 0;
@@ -1135,7 +1154,6 @@
                         }
                     }
 
-                    // 高亮最后一步
                     if (this.game.lastMove) {
                         const [lr, lc] = this.game.lastMove;
                         const x = MARGIN + lc * CELL_SIZE,
@@ -1152,7 +1170,6 @@
                         ctx.fill();
                     }
 
-                    // 游戏结束遮罩
                     if (this.game.gameOver) {
                         ctx.shadowColor = 'transparent';
                         ctx.shadowBlur = 0;
@@ -1164,14 +1181,22 @@
                         ctx.textBaseline = 'middle';
                         ctx.shadowColor = 'rgba(0,0,0,0.5)';
                         ctx.shadowBlur = 20;
-                        let txt = this.game.winner === 1 ? '🏆 你赢了' :
-                            this.game.winner === -1 ? '🤖 AI 赢了' : '🤝 平局';
+                        const winner = this.game.winner;
+                        let txt;
+                        if (winner === 1) {
+                              // 黑棋胜利
+                              txt = (this.playerColor === 'black') ? '🏆 你赢了' : '🤖 AI 赢了';
+                        } else if (winner === -1) {
+                              // 白棋胜利
+                              txt = (this.playerColor === 'white') ? '🏆 你赢了' : '🤖 AI 赢了';
+                        } else {
+                              txt = '🤝 平局';
+                        }
                         ctx.fillText(txt, W / 2, H / 2);
                         ctx.shadowBlur = 0;
                         ctx.shadowColor = 'transparent';
                     }
 
-                    // 坐标
                     ctx.shadowColor = 'transparent';
                     ctx.shadowBlur = 0;
                     ctx.fillStyle = '#5a3e2b';
