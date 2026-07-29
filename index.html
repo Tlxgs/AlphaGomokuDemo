@@ -303,10 +303,9 @@
                 </div>
                 <div class="param-row">
                     <span>难度</span>
-                    <div class="radio-group" id="simGroup">
-                        <label><input type="radio" name="simLevel" value="50" /> 简单</label>
-                        <label><input type="radio" name="simLevel" value="200" checked /> 普通</label>
-                        <label><input type="radio" name="simLevel" value="500" /> 专家</label>
+                    <div class="param-row">
+                        <input type="range" id="simSlider" min="1" max="9" value="3" step="1" style="flex:1; accent-color:#8ab4d6; height:6px;">
+                        <span id="simValue" style="min-width:36px;text-align:center;font-size:14px;color:#c0c8d8;">3</span>
                     </div>
                 </div>
             </div>
@@ -337,7 +336,7 @@
             const winWhite = document.getElementById('winWhite');
             const winrateText = document.getElementById('winrateText');
             const colorSelect = document.getElementById('colorSelect');
-            const simRadios = document.querySelectorAll('input[name="simLevel"]');
+            
             const resetBtn = document.getElementById('resetBtn');
             const modelStatusEl = document.getElementById('modelStatus');
 
@@ -709,20 +708,19 @@
                     this.winWhite = winWhite;
                     this.winrateText = winrateText;
                     this.colorSelect = colorSelect;
-                    this.simRadios = simRadios;
                     this.modelStatusEl = modelStatusEl;
+                    const simSlider = document.getElementById('simSlider');
+                    const simValue = document.getElementById('simValue');
 
                     canvas.addEventListener('click', this.onCanvasClick.bind(this));
                     resetBtn.addEventListener('click', this.resetGame.bind(this));
                     colorSelect.addEventListener('change', () => { this.resetGame(); });
-                    simRadios.forEach(radio => {
-                        radio.addEventListener('change', () => {
-                            if (this.mcts) {
-                                const val = parseInt(document.querySelector('input[name="simLevel"]:checked')
-                                .value);
-                                this.mcts.numSimulations = val;
-                            }
-                        });
+
+                    simSlider.addEventListener('input', () => {
+                        simValue.textContent = simSlider.value;
+                        if (this.mcts) {
+                            this.mcts.numSimulations = 1+2**parseInt(simSlider.value);
+                        }
                     });
 
                     this.draw();
@@ -741,7 +739,7 @@
                             graphOptimizationLevel: 'all',
                         });
 
-                        const simVal = parseInt(document.querySelector('input[name="simLevel"]:checked').value);
+                        const simVal = 1+2**parseInt(document.getElementById('simSlider').value);
                         this.mcts = new MCTS(session, { numSimulations: simVal });
                         this.isModelReady = true;
                         this.modelStatusEl.textContent = '✅ 模型加载成功';
@@ -768,7 +766,7 @@
                   this.game.currentPlayer = 1;
 
                   if (this.mcts) {
-                        const simVal = parseInt(document.querySelector('input[name="simLevel"]:checked').value);
+                        const simVal = 1+2**parseInt(document.getElementById('simSlider').value);
                         this.mcts.numSimulations = simVal;
                         await this.mcts.initRoot(this.game);
                   }
