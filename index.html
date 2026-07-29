@@ -313,17 +313,8 @@
 
             <div class="btn-group">
                 <button class="btn btn-primary" id="resetBtn">🔄 新游戏</button>
-                <button class="btn btn-danger" id="undoBtn">↩ 悔棋</button>
             </div>
 
-            <div class="info-row">
-                <span class="label">步数</span>
-                <span class="value" id="moveCount">0</span>
-            </div>
-            <div class="info-row">
-                <span class="label">状态</span>
-                <span class="value" id="turnInfo">你的回合</span>
-            </div>
             <div class="model-status" id="modelStatus">⏳ 等待 ONNX Runtime 加载...</div>
         </div>
     </div>
@@ -348,9 +339,6 @@
             const colorSelect = document.getElementById('colorSelect');
             const simRadios = document.querySelectorAll('input[name="simLevel"]');
             const resetBtn = document.getElementById('resetBtn');
-            const undoBtn = document.getElementById('undoBtn');
-            const moveCountEl = document.getElementById('moveCount');
-            const turnInfoEl = document.getElementById('turnInfo');
             const modelStatusEl = document.getElementById('modelStatus');
 
             // ---------- 游戏类 ----------
@@ -713,7 +701,6 @@
                     this.isAIThinking = false;
                     this.isGameOver = false;
                     this.isModelReady = false;
-                    this.moveCount = 0;
                     this.history = [];
                     this.playerColor = 'black';
 
@@ -723,13 +710,10 @@
                     this.winrateText = winrateText;
                     this.colorSelect = colorSelect;
                     this.simRadios = simRadios;
-                    this.moveCountEl = moveCountEl;
-                    this.turnInfoEl = turnInfoEl;
                     this.modelStatusEl = modelStatusEl;
 
                     canvas.addEventListener('click', this.onCanvasClick.bind(this));
                     resetBtn.addEventListener('click', this.resetGame.bind(this));
-                    undoBtn.addEventListener('click', this.undoMove.bind(this));
                     colorSelect.addEventListener('change', () => { this.resetGame(); });
                     simRadios.forEach(radio => {
                         radio.addEventListener('change', () => {
@@ -776,7 +760,6 @@
                   async resetGame() {
                   this.isAIThinking = false;
                   this.game.reset();
-                  this.moveCount = 0;
                   this.history = [];
                   this.isGameOver = false;
 
@@ -791,9 +774,7 @@
                   }
 
                   this.draw();
-                  this.updateMoveCount();
                   this.updateWinRate();
-                  this.updateTurnInfo();
 
                   // 如果玩家执白，AI 执黑先手，让 AI 走一步
                   if (this.playerColor === 'white' && !this.game.gameOver) {
@@ -802,32 +783,6 @@
                         this.updateStatus('你的回合');
                   }
                   }
-
-                async undoMove() {
-                    if (this.isAIThinking) return;
-                    if (this.history.length === 0) return;
-                    let undone = 0;
-                    while (this.history.length > 0 && undone < 2) {
-                        const last = this.history.pop();
-                        const [r, c] = last.move;
-                        this.game.board[r][c] = 0;
-                        this.game.currentPlayer = last.player;
-                        this.game.gameOver = false;
-                        this.game.winner = 0;
-                        this.game.lastMove = this.history.length > 0 ? this.history[this.history.length - 1].move : null;
-                        this.moveCount--;
-                        undone++;
-                    }
-                    this.isGameOver = false;
-                    if (this.mcts) {
-                        await this.mcts.initRoot(this.game);
-                    }
-                    this.draw();
-                    this.updateMoveCount();
-                    this.updateWinRate();
-                    this.updateTurnInfo();
-                    this.updateStatus('已悔棋，你的回合');
-                }
 
                 onCanvasClick(event) {
                     if (this.isAIThinking) return;
@@ -858,10 +813,8 @@
                     if (!this.game.isLegalMove(row, col)) return;
                     const playerBefore = this.game.currentPlayer;
                     this.game.makeMove(row, col);
-                    this.moveCount++;
                     this.history.push({ move: [row, col], player: playerBefore });
                     this.draw();
-                    this.updateMoveCount();
 
                     if (this.game.gameOver) {
                         this.handleGameOver();
@@ -884,7 +837,7 @@
                     if (!this.mcts) return;
 
                     this.isAIThinking = true;
-                    this.updateStatus('🤖 AI 思考中...');
+                    this.updateStatus('AI 思考中...');
 
                     try {
                         const legalMoves = this.game.getLegalMoves();
@@ -897,11 +850,8 @@
                             test.board[r][c] = aiPlayer;
                             if (test.checkWin(r, c)) {
                                 this.game.makeMove(r, c);
-                                this.moveCount++;
                                 this.history.push({ move: [r, c], player: aiPlayer });
                                 this.draw();
-                                this.updateMoveCount();
-                                // ---- 修复：快速路径也更新 MCTS 根节点 ----
                                 if (this.mcts) {
                                     this.mcts.updateRoot(this.game, [r, c]);
                                 }
@@ -911,7 +861,6 @@
                                 } else {
                                     this.updateStatus('你的回合');
                                     this.updateWinRate();
-                                    this.updateTurnInfo();
                                 }
                                 return;
                             }
@@ -923,11 +872,8 @@
                             test.board[r][c] = opponent;
                             if (test.checkWin(r, c)) {
                                 this.game.makeMove(r, c);
-                                this.moveCount++;
                                 this.history.push({ move: [r, c], player: aiPlayer });
                                 this.draw();
-                                this.updateMoveCount();
-                                // ---- 修复：快速路径也更新 MCTS 根节点 ----
                                 if (this.mcts) {
                                     this.mcts.updateRoot(this.game, [r, c]);
                                 }
@@ -937,7 +883,6 @@
                                 } else {
                                     this.updateStatus('你的回合');
                                     this.updateWinRate();
-                                    this.updateTurnInfo();
                                 }
                                 return;
                             }
@@ -958,10 +903,8 @@
                         }
 
                         this.game.makeMove(r, c);
-                        this.moveCount++;
                         this.history.push({ move: [r, c], player: aiPlayer });
                         this.draw();
-                        this.updateMoveCount();
 
                         if (this.mcts) {
                             this.mcts.updateRoot(this.game, [r, c]);
@@ -973,7 +916,6 @@
                             this.handleGameOver();
                         } else {
                             this.updateStatus('你的回合');
-                            this.updateTurnInfo();
                         }
                     } catch (err) {
                         console.error('AI 搜索错误:', err);
@@ -1005,7 +947,6 @@
                         this.updateStatus('🤝 平局！');
                         this.statusEl.className = 'status';
                     }
-                    this.turnInfoEl.textContent = '游戏结束';
                     this.draw();
                 }
 
@@ -1016,19 +957,6 @@
                     }
                 }
 
-                updateMoveCount() {
-                    this.moveCountEl.textContent = this.moveCount;
-                }
-
-                updateTurnInfo() {
-                    if (this.game.gameOver) {
-                        this.turnInfoEl.textContent = '已结束';
-                        return;
-                    }
-                    const isPlayerTurn = (this.playerColor === 'black' && this.game.currentPlayer === 1) ||
-                        (this.playerColor === 'white' && this.game.currentPlayer === -1);
-                    this.turnInfoEl.textContent = isPlayerTurn ? '你的回合' : 'AI 思考中...';
-                }
 
                   updateWinRate() {
                   // 若 MCTS 未初始化或无访问记录，显示 50/50
